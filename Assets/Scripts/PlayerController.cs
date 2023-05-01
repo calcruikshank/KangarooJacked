@@ -6,7 +6,7 @@ using UnityEngine.InputSystem;
 
 public class PlayerController : MonoBehaviour
 {
-    public Stack inputStack = new Stack();
+    public Queue<BufferInput> inputQueue = new Queue<BufferInput>();
 
     Vector2 rightStickValue = new Vector2();
     Vector2 leftStickValue = new Vector2();
@@ -19,6 +19,8 @@ public class PlayerController : MonoBehaviour
     float currentDashSpeed;
     Vector2 dashDir = new Vector2();
 
+
+    [SerializeField] Transform kangarooJacked;
 
     [SerializeField] LayerMask groundLayer;
     Collider2D col;
@@ -121,9 +123,9 @@ public class PlayerController : MonoBehaviour
 
     void HandleBufferInput()
     {
-        if (inputStack.Count > 0)
+        if (inputQueue.Count > 0)
         {
-            BufferInput currentBufferedInput = (BufferInput)inputStack.Peek();
+            BufferInput currentBufferedInput = (BufferInput)inputQueue.Peek();
 
             if (Time.time - currentBufferedInput.timeOfInput < bufferTimerThreshold)
             {
@@ -132,14 +134,15 @@ public class PlayerController : MonoBehaviour
                     if (grounded)
                     {
                         Jump();
-                        inputStack.Pop();
+                        inputQueue.Dequeue();
                     }
                     if (!grounded && !groundHasNotBeenLeftAfterJumping && currentNumOfExtraJumps < numOfExtraJumps)
                     {
+                        kangarooJacked.transform.localScale = new Vector3(.187f * MathF.Sign(lastMoveDir.x), kangarooJacked.transform.localScale.y, kangarooJacked.transform.localScale.z);
                         currentNumOfExtraJumps++;
                         rb.velocity = new Vector2(movement.x * maxSpeed, 0);
                         Jump();
-                        inputStack.Pop();
+                        inputQueue.Dequeue();
                     }
                 }
                 if (currentBufferedInput.actionType == KangarooJackedData.InputActionType.DASH)
@@ -154,13 +157,13 @@ public class PlayerController : MonoBehaviour
                         {
                             Dash(currentBufferedInput.directionOfAction);
                         }
-                        inputStack.Pop();
+                        inputQueue.Dequeue();
                     }
                 }
             }
             if (Time.time - currentBufferedInput.timeOfInput >= bufferTimerThreshold)
             {
-                inputStack.Pop();
+                inputQueue.Dequeue();
             }
         }
     }
@@ -199,7 +202,14 @@ public class PlayerController : MonoBehaviour
 
     private void HandleMovement()
     {
-        movement = leftStickValue; 
+        movement = leftStickValue;
+        if (grounded)
+        {
+            if (lastMoveDir.x != 0)
+            {
+                kangarooJacked.transform.localScale = new Vector3(.187f * MathF.Sign(lastMoveDir.x), kangarooJacked.transform.localScale.y, kangarooJacked.transform.localScale.z);
+            }
+        }
     }
     private void FixedHandleMovement()
     {
@@ -209,7 +219,7 @@ public class PlayerController : MonoBehaviour
         //instead of using move towards i want to keep the momentum of the rb if the current velocity is higher than the input velocity this way it will only ever add force in the direction of input
         if (grounded)
         {
-            rb.velocity = Vector2.MoveTowards(rb.velocity, new Vector2(movement.x * maxSpeed, rb.velocity.y), 20);
+            rb.velocity = Vector2.MoveTowards(rb.velocity, new Vector2(movement.x * maxSpeed, rb.velocity.y), 3);
         }
 
         if (!grounded)
@@ -238,13 +248,13 @@ public class PlayerController : MonoBehaviour
     void OnJump()
     {
         BufferInput jumpBuffer = new BufferInput(KangarooJackedData.InputActionType.JUMP, leftStickValue, Time.time);
-        inputStack.Push(jumpBuffer);
+        inputQueue.Enqueue(jumpBuffer);
     }
 
     void OnDash()
     {
         BufferInput dashBuffer = new BufferInput(KangarooJackedData.InputActionType.DASH, lastMoveDir.normalized, Time.time);
-        inputStack.Push(dashBuffer);
+        inputQueue.Enqueue(dashBuffer);
     }
 
     private void SetStateToDashing()
